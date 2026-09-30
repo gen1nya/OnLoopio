@@ -124,8 +124,8 @@ if($RestoreBackup) {
         }
         return
     }
-    Write-Host 'This package supports only the verified Y1 Type A hardware profile.'
-    if((Read-Host 'Confirm your player is Innioasis Y1 Type A (type YES)') -cne 'YES'){throw 'Installation cancelled.'}
+    Write-Host 'This package supports only Y1 Type A: a player that originally shipped with OS 2.0.0 or later.'
+    if((Read-Host 'Confirm this player originally shipped with OS 2.0.0 or later, and is not an upgraded Type B (type YES)') -cne 'YES'){throw 'Installation cancelled: hardware type must be known.'}
     $backupRootFull=[IO.Path]::GetFullPath($BackupRoot)
     $repoRoot=[IO.Path]::GetFullPath((Join-Path $package '..'))
     if($backupRootFull.StartsWith($repoRoot+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)){throw 'Backup root must be outside the firmware package.'}
