@@ -19,9 +19,6 @@ android {
         debug { debuggable true }
         release { debuggable false; minifyEnabled false }
     }
-    if (rootProject.file('.local/debug.keystore').exists()) {
-        signingConfigs.debug.storeFile rootProject.file('.local/debug.keystore')
-    }
     lint { disable 'ExpiredTargetSdkVersion', 'OldTargetApi' }
 }
 dependencies { implementation 'org.conscrypt:conscrypt-android:2.5.2' }

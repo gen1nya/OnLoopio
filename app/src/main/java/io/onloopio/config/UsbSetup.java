@@ -40,8 +40,10 @@ public final class UsbSetup {
             if(password.length()==0)saved.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
             else { saved.preSharedKey=quoted(password);saved.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK); }
             int id=wifi.addNetwork(saved);
-            if(id<0 || !wifi.saveConfiguration() || !wifi.setWifiEnabled(true) || !wifi.enableNetwork(id,true) || !wifi.reconnect())
+            if(id<0 || !wifi.saveConfiguration() || !wifi.setWifiEnabled(true) || !wifi.enableNetwork(id,true))
                 throw new IllegalStateException("Could not save or connect Wi-Fi");
+            // Wi-Fi may still be turning on; an immediate reconnect failure is transient.
+            wifi.reconnect();
             new ConfigStore(context).save(config);
             settings.setText("home_ssid",ssid);
             settings.setText("setup_status","Setup imported · connecting Wi-Fi");

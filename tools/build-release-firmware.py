@@ -109,6 +109,11 @@ def build(args):
         (stage / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n', 'utf-8')
         for script in ('install-firmware.ps1', 'setup-usb.ps1'):
             shutil.copyfile(Path(__file__).parent / script, stage / script)
+        repository = Path(__file__).resolve().parent.parent
+        for source, target in (('docs/install.md', 'INSTALL.md'),
+                               ('docs/setup.md', 'SETUP.md'),
+                               ('THIRD_PARTY.md', 'THIRD_PARTY.md')):
+            shutil.copyfile(repository / source, stage / target)
         package = args.output / ('OnLoopio-Y1-TypeA-v' + version + '.zip')
         with zipfile.ZipFile(package, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
             for file in sorted(stage.iterdir()):
