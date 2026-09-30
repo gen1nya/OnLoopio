@@ -1,0 +1,14 @@
+* text=auto
+*.sh text eol=lf
+gradlew text eol=lf
+*.py text eol=lf
+*.yml text eol=lf
+*.gradle text eol=lf
+*.png binary
+*.jar binary
+*.aac binary
+*.flac binary
+*.m4a binary
+*.mp3 binary
+*.ogg binary
+*.wav binary

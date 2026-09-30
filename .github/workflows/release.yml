@@ -1,0 +1,84 @@
+name: Firmware candidate and release
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Require main HEAD and matching version tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+            grep -Fq "versionName '${GITHUB_REF_NAME#v}'" app/build.gradle
+          fi
+      - name: Check public tree
+        run: python3 tools/check-public-tree.py
+      - name: Scan committed secrets
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+      - name: Install Android SDK and filesystem tools
+        run: |
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+          sudo apt-get update
+          sudo apt-get install -y e2fsprogs binutils
+      - name: Compile and test unsigned APK
+        run: ./gradlew :app:assembleRelease :app:test --no-daemon
+      - name: Sign in GitHub Actions and verify API 17
+        shell: bash
+        env:
+          RELEASE_KEY_B64: ${{ secrets.ONLOOPIO_KEYSTORE_BASE64 }}
+          STOREPASS: ${{ secrets.ONLOOPIO_KEYSTORE_PASSWORD }}
+          KEYPASS: ${{ secrets.ONLOOPIO_KEY_PASSWORD }}
+          KEYALIAS: ${{ secrets.ONLOOPIO_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          test -n "$RELEASE_KEY_B64" && test -n "$STOREPASS" && test -n "$KEYPASS" && test -n "$KEYALIAS"
+          printf %s "$RELEASE_KEY_B64" | base64 -d > "$RUNNER_TEMP/onloopio-release.jks"
+          chmod 600 "$RUNNER_TEMP/onloopio-release.jks"
+          mkdir -p "$RUNNER_TEMP/signed" release-output
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f 4 app/build/outputs/apk/release/app-release-unsigned.apk "$RUNNER_TEMP/signed/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$RUNNER_TEMP/onloopio-release.jks" --ks-key-alias "$KEYALIAS" --ks-pass env:STOREPASS --key-pass env:KEYPASS --v1-signing-enabled true --v2-signing-enabled true --out "$RUNNER_TEMP/signed/OnLoopio.apk" "$RUNNER_TEMP/signed/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --min-sdk-version 17 "$RUNNER_TEMP/signed/OnLoopio.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$RUNNER_TEMP/signed/OnLoopio.apk" | grep "sdkVersion:'17'"
+          rm -f "$RUNNER_TEMP/onloopio-release.jks"
+      - name: Assemble verified generic Type A firmware
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(sed -n "s/.*versionName '\([0-9.]*\)'.*/\1/p" app/build.gradle | head -1)
+          python3 tools/build-release-firmware.py --apk "$RUNNER_TEMP/signed/OnLoopio.apk" --aapt "$ANDROID_HOME/build-tools/35.0.0/aapt" --output release-output --version "$version"
+          cd release-output
+          sha256sum -c SHA256SUMS.txt
+          unzip -l "OnLoopio-Y1-TypeA-v$version.zip"
+      - uses: actions/upload-artifact@v6
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        with:
+          name: OnLoopio-Y1-TypeA-candidate
+          path: release-output/*
+          if-no-files-found: error
+          retention-days: 14
+      - name: Publish tag release
+        if: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$GITHUB_REF_NAME" release-output/* --title "OnLoopio $GITHUB_REF_NAME · Y1 Type A" --notes-file CHANGELOG.md --verify-tag
+    permissions:
+      contents: write
