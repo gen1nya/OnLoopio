@@ -32,8 +32,9 @@ public final class NowPlayingView extends View {
     public boolean hasCover(){return cover!=null;}public boolean hasNextCover(){return nextCover!=null;}
     protected void onWindowVisibilityChanged(int visibility){super.onWindowVisibilityChanged(visibility);Spectrum.wanted=visibility==VISIBLE;}
     protected void onDetachedFromWindow(){Spectrum.wanted=false;super.onDetachedFromWindow();}
-    /** Translucent bars over the lower half of the cover, interpolated to display rate from 20 Hz captures. */
-    private static final int BAR=5,GAP=1,FRAME_MS=16;
+    /** Translucent bars over the lower half of the cover, interpolated to display rate from 20 Hz captures.
+     *  Redraws ride the Choreographer vsync so the main looper still idles between frames; a delayed post would starve idle handlers. */
+    private static final int BAR=5,GAP=1;
     private final float[] levels=new float[Spectrum.BANDS];
     private void spectrum(Canvas c,int x,int y,int size){
         if(!Spectrum.active() || !state.playing || state.song==null)return;
@@ -42,7 +43,7 @@ public final class NowPlayingView extends View {
         c.drawRoundRect(new RectF(x,top,x+size,bottom),8,8,scrim);
         Spectrum.levels(levels,android.os.SystemClock.uptimeMillis());
         for(int b=0;b<Spectrum.BANDS;b++){int h=Math.round(levels[b]*room);if(h>0){int l=left+b*(BAR+GAP);c.drawRect(l,base-h,l+BAR,base,bars);}}
-        postInvalidateDelayed(FRAME_MS);
+        postInvalidateOnAnimation();
     }
     private void line(Canvas c,String value,float x,float y,int size,int color,float width,boolean bold){text.setTextSize(size);text.setColor(color);text.setTypeface(bold?Typeface.DEFAULT_BOLD:Typeface.DEFAULT);c.drawText(TextUtils.ellipsize(value==null?"":value,text,width,TextUtils.TruncateAt.END).toString(),x,y,text);}
     private void art(Canvas c,Bitmap bitmap,int x,int y,int size){
