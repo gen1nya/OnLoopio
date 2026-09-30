@@ -12,7 +12,7 @@
 |:--:|:--:|:--:|
 | ![Playlist tracks](docs/screenshots/playlist-detail.png) | ![Saved offline track](docs/screenshots/offline-downloads.png) | ![Device settings](docs/screenshots/settings.png) |
 
-Screens are real Y1 captures. The offline download screen shows an earlier build of the same client.
+Screens are real Y1 captures, including an offline download completed on v0.9.0.
 
 ## What it does
 
