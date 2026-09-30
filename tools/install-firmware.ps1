@@ -37,6 +37,19 @@ function Assert-Images([string]$boot,[string]$system,[string]$bootHash,[string]$
     $magic=[byte[]]::new(2);$stream=[IO.File]::OpenRead($system);try{$stream.Position=1080;if($stream.Read($magic,0,2) -ne 2 -or $magic[0] -ne 0x53 -or $magic[1] -ne 0xEF){throw 'Invalid ext4 system image.'}}finally{$stream.Dispose()}
 }
 
+function Test-ImageText([string]$path,[string]$needle) {
+    $stream=[IO.File]::OpenRead($path)
+    try {
+        $buffer=[byte[]]::new(1048576);$overlap=''
+        while(($count=$stream.Read($buffer,0,$buffer.Length)) -gt 0) {
+            $text=$overlap+[Text.Encoding]::ASCII.GetString($buffer,0,$count)
+            if($text.Contains($needle)){return $true}
+            $overlap=$text.Substring([Math]::Max(0,$text.Length-$needle.Length))
+        }
+        return $false
+    } finally {$stream.Dispose()}
+}
+
 function New-Config([string]$directory,[string]$command,[object[]]$ranges,[string]$scatterPath) {
     $doc=[xml]'<flashtool-config version="2.0"><general><chip-name>MT6572</chip-name><storage-type>EMMC</storage-type><download-agent/><scatter/><authentication/><certification/><rom-list/><connection type="BromUSB" high-speed="true" power="AutoDetect" timeout-count="3600000" com-port=""/><checksum-level>both</checksum-level><log-info log_on="true" log_path="" clean_hours="720"/></general><commands/></flashtool-config>'
     $doc.'flashtool-config'.general.'download-agent'=$daemon
@@ -137,6 +150,7 @@ if($RestoreBackup) {
     $backupSystemHash=(Get-FileHash -LiteralPath (Join-Path $backup 'system.img') -Algorithm SHA256).Hash.ToLowerInvariant()
     Assert-Images (Join-Path $backup 'boot.img') (Join-Path $backup 'system.img') $backupBootHash $backupSystemHash
     if([Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes((Join-Path $backup 'recovery.img')),0,8) -ne 'ANDROID!'){throw 'Recovery header differs from verified profile.'}
+    if(-not (Test-ImageText (Join-Path $backup 'system.img') 'ro.product.model=Y1') -or -not (Test-ImageText (Join-Path $backup 'system.img') 'ro.build.fingerprint=Timmkoo@1780738034')){throw 'System identity differs from the verified Y1 3.1.2 profile.'}
     @{status='verified_y1_type_a';boot_sha256=$backupBootHash;system_sha256=$backupSystemHash;profile_sha256=(Get-FileHash -LiteralPath (Join-Path $backup 'profile.bin') -Algorithm SHA256).Hash.ToLowerInvariant()} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $backup 'backup.json') -Encoding UTF8
     Write-Host "Private BOOT/SYSTEM backup verified at $backup"
 }
