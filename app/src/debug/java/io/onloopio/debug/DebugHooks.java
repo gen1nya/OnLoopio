@@ -34,6 +34,14 @@ public final class DebugHooks extends BroadcastReceiver {
         else if("io.onloopio.debug.PLAYER".equals(action))open(context,"io.onloopio.OPEN_PLAYER");
         else if("io.onloopio.debug.LIBRARY".equals(action))open(context,"io.onloopio.OPEN_LIBRARY");
         else if("io.onloopio.debug.FLAG".equals(action)){new io.onloopio.device.DeviceSettings(context).setFlag(intent.getStringExtra("key"),intent.getBooleanExtra("value",true));PlaybackService.action(context,PlaybackService.SETTINGS);}
+        else if("io.onloopio.debug.SEED".equals(action)){
+            // Synthetic local library for list performance checks: --ei count N (0 removes the seed). Paths do not exist, so a Music rescan also drops them.
+            int count=intent.getIntExtra("count",7000);MetadataStore store=new MetadataStore(context);
+            try{List<MetadataStore.LocalEntry> kept=new java.util.ArrayList<MetadataStore.LocalEntry>();for(MetadataStore.LocalEntry e:store.localEntries())if(!e.song.id.startsWith("local:seed"))kept.add(e);
+                for(int n=0;n<count;n++){int artist=n/120,album=n/12;String path=io.onloopio.library.MusicPaths.root()+"/_seed/Artist "+artist+"/Album "+album+"/"+(n%12+1)+".mp3";
+                    kept.add(new MetadataStore.LocalEntry(new Song("local:seed"+n,"Seed track "+n,"Seed artist "+artist,"Seed album "+album,"mp3",180+n%120,"",n%12+1,"","Seed genre "+n%7,1,"",path),1,0));}
+                store.replaceLocalSongs(kept);Log.i("OnLoopio","DEBUG_HOOK seeded "+count+" tracks, library="+kept.size());}finally{store.close();}
+            open(context,"io.onloopio.OPEN_LIBRARY");}
         else if("io.onloopio.debug.SCAN".equals(action))io.onloopio.library.MusicLibraryService.request(context,true);
     }
     private static void open(Context context,String screen){context.startActivity(new Intent(context,PlaylistActivity.class).setAction(screen).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP));}

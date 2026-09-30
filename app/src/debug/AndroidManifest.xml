@@ -10,6 +10,7 @@
                 <action android:name="io.onloopio.debug.LIBRARY" />
                 <action android:name="io.onloopio.debug.SCAN" />
                 <action android:name="io.onloopio.debug.FLAG" />
+                <action android:name="io.onloopio.debug.SEED" />
             </intent-filter>
         </receiver>
     </application>
