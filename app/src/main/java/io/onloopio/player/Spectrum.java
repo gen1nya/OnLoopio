@@ -15,7 +15,7 @@ import android.util.Log;
 public final class Spectrum {
     private Spectrum() { }
     public static final int BANDS=32;
-    static final long DISABLE_DELAY_MS=1500,REENABLE_GAP_MS=300;
+    public static final long DISABLE_DELAY_MS=1500,REENABLE_GAP_MS=300;
     private static final float[] EMPTY=new float[BANDS];
     /** Log-spaced band levels 0..1 from the lowest FFT bin to Nyquist; empty while idle. */
     public static volatile float[] bands=EMPTY;
@@ -28,7 +28,7 @@ public final class Spectrum {
     private static final Handler handler;
     static{thread.start();handler=new Handler(thread.getLooper());}
     // Touched on the spectrum thread only.
-    private static Visualizer visualizer;private static int session=-1,failed=-1;private static boolean enabled;private static long disabledAt;
+    private static Visualizer visualizer;private static int session=-1,failed=-1;private static boolean enabled,disablePending;private static long disabledAt;
     private static volatile boolean playing;
     private static final float[] smoothed=new float[BANDS];private static int[] edges;
     /** 8-bit FFT magnitudes are small and device dependent, so levels are relative to a slowly decaying peak. */
@@ -40,14 +40,21 @@ public final class Spectrum {
     public static void sync(final int sessionId,final boolean playingNow){
         boolean want=playingNow && wanted && sessionId>0;
         if(playing!=want){playing=want;if(!want)quiet();}
-        handler.removeCallbacks(disable);
         handler.post(new Runnable(){public void run(){apply(sessionId,want);}});
     }
-    public static void release(){handler.removeCallbacks(disable);handler.post(new Runnable(){public void run(){releaseNow();}});}
+    public static void release(){handler.post(new Runnable(){public void run(){releaseNow();}});}
+    /** Whether the native effect is currently enabled; answered on the spectrum thread so tests can verify idle shutdown. */
+    public static boolean effectEnabled(){
+        final boolean[] result=new boolean[1];final java.util.concurrent.CountDownLatch done=new java.util.concurrent.CountDownLatch(1);
+        handler.post(new Runnable(){public void run(){try{result[0]=visualizer!=null && enabled && visualizer.getEnabled();}catch(IllegalStateException dead){result[0]=false;}done.countDown();}});
+        try{done.await(2,java.util.concurrent.TimeUnit.SECONDS);}catch(InterruptedException interrupted){Thread.currentThread().interrupt();}
+        return result[0];
+    }
 
     private static void apply(int sessionId,boolean want){
         if(sessionId!=session){releaseNow();session=sessionId;}
         if(want){
+            if(disablePending){handler.removeCallbacks(disable);disablePending=false;}
             if(visualizer==null && sessionId!=failed){
                 try{visualizer=new Visualizer(sessionId);visualizer.setCaptureSize(Visualizer.getCaptureSizeRange()[1]);captureMs=Math.max(16,1000000/Math.max(1,Visualizer.getMaxCaptureRate()));
                     visualizer.setDataCaptureListener(new Visualizer.OnDataCaptureListener(){
@@ -61,14 +68,15 @@ public final class Spectrum {
                 if(wait>0){final int s=sessionId;handler.postDelayed(new Runnable(){public void run(){if(playing)apply(s,true);}},wait);return;}
                 try{visualizer.setEnabled(true);enabled=true;}catch(IllegalStateException dead){releaseNow();}
             }
-        } else if(visualizer!=null && enabled) handler.postDelayed(disable,DISABLE_DELAY_MS);
+        } else if(visualizer!=null && enabled && !disablePending){disablePending=true;handler.postDelayed(disable,DISABLE_DELAY_MS);} // scheduled once per idle transition; repeated sync(false) must not push it out
     }
     private static final Runnable disable=new Runnable(){public void run(){
-        if(visualizer==null || !enabled || playing)return;
+        disablePending=false;if(visualizer==null || !enabled || playing)return;
         try{visualizer.setEnabled(false);}catch(IllegalStateException dead){releaseNow();return;}
         enabled=false;disabledAt=SystemClock.uptimeMillis();
     }};
     private static void releaseNow(){
+        handler.removeCallbacks(disable);disablePending=false;
         if(visualizer!=null){if(enabled){try{visualizer.setEnabled(false);}catch(IllegalStateException ignored){}disabledAt=SystemClock.uptimeMillis();}visualizer.release();}
         visualizer=null;enabled=false;session=-1;quiet();
     }

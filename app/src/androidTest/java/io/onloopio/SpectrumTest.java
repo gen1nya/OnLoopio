@@ -46,6 +46,15 @@ public final class SpectrumTest extends InstrumentationTestCase {
         assertEquals("Visualizer failed: "+Spectrum.status,"",Spectrum.status);
         assertTrue("No FFT captures arrived",Spectrum.captures-before>=10);
         assertTrue("Spectrum stayed flat, peak="+peak,peak>.3f);
+        assertTrue("Effect not enabled while playing",Spectrum.effectEnabled());
+        PlaybackService.action(context,PlaybackService.PAUSE);Thread.sleep(600);
+        float[] paused=Spectrum.bands;for(float level:paused)assertEquals("Bands not cleared after PAUSE",0f,level);
+        // The service tick keeps calling sync every 500 ms during the pause; the deferred disable must still fire.
+        for(int n=0;n<40 && Spectrum.effectEnabled();n++)Thread.sleep(100);
+        assertFalse("Native Visualizer still enabled "+Spectrum.DISABLE_DELAY_MS+" ms plus after PAUSE",Spectrum.effectEnabled());
+        PlaybackService.action(context,PlaybackService.RESUME);
+        for(int n=0;n<40 && !Spectrum.effectEnabled();n++)Thread.sleep(100);
+        assertTrue("Effect not re-enabled after RESUME",Spectrum.effectEnabled());
         PlaybackService.action(context,PlaybackService.STOP);Thread.sleep(1200);
         float[] idle=Spectrum.bands;for(float level:idle)assertEquals("Bands not cleared after STOP",0f,level);
     }
